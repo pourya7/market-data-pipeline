@@ -88,6 +88,22 @@ class DataCleaner:
         """
         result = df.copy()
         
+        # Step 0: Preprocess - ensure we have the required columns and clean index
+        ohlcv_cols = ["open", "high", "low", "close", "volume"]
+        
+        # Keep only OHLCV columns (drop symbol, provider, interval if present)
+        extra_cols = [c for c in result.columns if c not in ohlcv_cols]
+        if extra_cols:
+            result = result.drop(columns=extra_cols, errors="ignore")
+        
+        # Ensure we have DatetimeIndex
+        if not isinstance(result.index, pd.DatetimeIndex):
+            if "timestamp" in result.columns:
+                result = result.set_index("timestamp")
+        
+        # Drop any rows with NaN values (from API or reindexing)
+        result = result.dropna(subset=ohlcv_cols, how="any")
+        
         # Step 1: Input validation
         if self.config.validate_input:
             result, errors = validate_ohlcv(
@@ -111,6 +127,12 @@ class DataCleaner:
                 freq=self.config.freq,
                 trading_days_only=self.config.trading_days_only,
             )
+        
+        # Step 3.5: Remove any remaining NaN rows (gaps too large to fill)
+        ohlcv_cols = ["open", "high", "low", "close", "volume"]
+        available_cols = [c for c in ohlcv_cols if c in result.columns]
+        if available_cols:
+            result = result.dropna(subset=available_cols, how="any")
         
         # Step 4: Output validation
         if self.config.validate_output:

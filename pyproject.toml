@@ -31,6 +31,8 @@ dependencies = [
     "tenacity>=8.2",
     "yfinance>=0.2.30",
     "pandera>=0.18",
+    "streamlit>=1.29",
+    "plotly>=5.18",
 ]
 
 [project.optional-dependencies]

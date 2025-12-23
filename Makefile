@@ -11,6 +11,7 @@ help:
 	@echo "  make lint         Run linter (ruff)"
 	@echo "  make format       Format code (ruff)"
 	@echo "  make typecheck    Run type checker (mypy)"
+	@echo "  make dashboard    Launch Streamlit dashboard"
 	@echo "  make clean        Remove build artifacts"
 
 # Installation
@@ -55,3 +56,7 @@ clean:
 # Development
 dev:
 	pip install -e ".[dev]" && pre-commit install
+
+# Dashboard
+dashboard:
+	streamlit run src/market_data/dashboard/app.py

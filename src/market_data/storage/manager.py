@@ -69,10 +69,19 @@ class StorageManager:
     
     @property
     def manifest(self) -> Manifest:
-        """Get cached manifest, loading from disk if needed."""
+        """Get manifest, loading from disk if not cached."""
         if self._manifest is None:
             self._manifest = self.manifest_manager.load()
         return self._manifest
+    
+    def reload_manifest(self) -> Manifest:
+        """Force reload manifest from disk and update cache."""
+        self._manifest = self.manifest_manager.load()
+        return self._manifest
+    
+    def clear_manifest_cache(self) -> None:
+        """Clear the manifest cache to force reload on next access."""
+        self._manifest = None
     
     def save(
         self,
