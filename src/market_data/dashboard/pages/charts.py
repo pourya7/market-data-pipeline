@@ -237,18 +237,14 @@ def render_charts():
     
     # Data table
     with st.expander("📋 View Raw Data"):
-        # Format columns dynamically
-        format_dict = {
-            "open": "{:.2f}",
-            "high": "{:.2f}",
-            "low": "{:.2f}",
-            "close": "{:.2f}",
-            "volume": "{:,.0f}",
-        }
-        # Add formatting for indicator columns
+        # Format columns dynamically - only for numeric types
+        format_dict = {}
         for col in df.columns:
-            if col not in format_dict and col not in ["open", "high", "low", "close", "volume"]:
-                format_dict[col] = "{:.2f}"
+            if pd.api.types.is_numeric_dtype(df[col]):
+                if col == "volume":
+                    format_dict[col] = "{:,.0f}"
+                else:
+                    format_dict[col] = "{:.2f}"
         
         st.dataframe(
             df.tail(50).style.format(format_dict, na_rep="-"),
