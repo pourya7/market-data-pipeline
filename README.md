@@ -93,6 +93,7 @@ src/market_data/
 ├── dashboard/      # Streamlit Command Center
 ├── features/       # Technical analysis & feature engineering
 ├── models/         # Pydantic OHLCV models
+├── resampling/     # Time/volume/tick bar generation
 └── storage/        # Parquet persistence
 ```
 
