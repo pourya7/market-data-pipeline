@@ -100,6 +100,24 @@ def render_charts():
         help="Resample data to a different timeframe",
     )
     
+    # Source interval filter
+    st.sidebar.markdown("### 📁 Source Data")
+    
+    available_intervals = storage.get_available_intervals(selected_symbol)
+    
+    if available_intervals:
+        # Add "All" option
+        interval_options = ["All intervals"] + available_intervals
+        selected_source_interval = st.sidebar.selectbox(
+            "Source Interval",
+            options=interval_options,
+            index=0,
+            help="Filter by stored data interval. Use 'All' to include all data.",
+        )
+        source_interval = None if selected_source_interval == "All intervals" else selected_source_interval
+    else:
+        source_interval = None
+    
     # Chart options
     st.sidebar.markdown("### ⚙️ Chart Options")
     
@@ -130,6 +148,7 @@ def render_charts():
             selected_symbol,
             start_date=start_date,
             end_date=end_date,
+            interval=source_interval,
         )
     except Exception as e:
         st.error(f"Failed to load data: {e}")
@@ -142,6 +161,7 @@ def render_charts():
     # Resample if needed
     timeframe = TIMEFRAME_OPTIONS[selected_timeframe]
     original_count = len(df)
+
     
     if timeframe is not None:
         resampler = TimeResampler()

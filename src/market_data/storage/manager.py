@@ -158,6 +158,7 @@ class StorageManager:
         start_date: Optional[date | str] = None,
         end_date: Optional[date | str] = None,
         columns: Optional[list[str]] = None,
+        interval: Optional[str] = None,
     ) -> pd.DataFrame:
         """Load OHLCV data from storage.
         
@@ -166,6 +167,7 @@ class StorageManager:
             start_date: Filter data from this date.
             end_date: Filter data until this date.
             columns: Columns to load (None = all).
+            interval: Filter by bar interval (e.g., "1m", "1d"). None = all.
             
         Returns:
             DataFrame with requested data.
@@ -208,7 +210,34 @@ class StorageManager:
         if end_date:
             result = result[result.index.date <= end_date]
         
+        # Apply interval filter
+        if interval is not None and "interval" in result.columns:
+            result = result[result["interval"] == interval]
+        
         return result
+    
+    def get_available_intervals(self, symbol: str) -> list[str]:
+        """Get available intervals for a symbol.
+        
+        Args:
+            symbol: Ticker symbol.
+            
+        Returns:
+            List of available intervals (e.g., ["1m", "1d"]).
+        """
+        symbol = symbol.upper()
+        partitions = self.partitions.get_partitions_for_symbol(symbol)
+        
+        if not partitions:
+            return []
+        
+        intervals = set()
+        for partition in partitions:
+            df = self.reader.read(partition.path, columns=["interval"])
+            if "interval" in df.columns:
+                intervals.update(df["interval"].dropna().unique())
+        
+        return sorted(list(intervals))
     
     def needs_update(
         self,
