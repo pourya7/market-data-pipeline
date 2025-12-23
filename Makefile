@@ -59,4 +59,4 @@ dev:
 
 # Dashboard
 dashboard:
-	streamlit run src/market_data/dashboard/app.py
+	. .venv/bin/activate && streamlit run src/market_data/dashboard/app.py
