@@ -91,9 +91,28 @@ src/market_data/
 ├── cleaning/       # Data cleaning (validation, adjustments, gaps)
 ├── core/           # Rate limiting, retry, config
 ├── dashboard/      # Streamlit Command Center
+├── features/       # Technical analysis & feature engineering
 ├── models/         # Pydantic OHLCV models
 └── storage/        # Parquet persistence
 ```
+
+## Feature Engineering
+
+Add technical indicators to your OHLCV data:
+
+```python
+from market_data.features import TechnicalAnalyzer, FeaturePipeline
+
+# Quick: Add default indicators
+analyzer = TechnicalAnalyzer()
+df = analyzer.add_defaults(df)  # RSI, MACD, BBands, SMA, EMA, ATR
+
+# Or use the pipeline with YAML config
+pipeline = FeaturePipeline()
+df = pipeline.calculate_features(df, asset_class="crypto")
+```
+
+**Available Indicators:** RSI, MACD, Bollinger Bands, SMA, EMA, ATR, Stochastic, Volume SMA
 
 ## Dashboard
 
