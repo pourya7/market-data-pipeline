@@ -77,8 +77,18 @@ class GapHandler:
         else:
             expected_index = pd.date_range(start=start, end=end, freq=freq)
         
+        # Normalize both indices to date-only (midnight) for comparison
+        # This handles: 1) timezone mismatches, 2) time component differences
+        df_dates = df.index.normalize()
+        if df_dates.tz is not None:
+            df_dates = df_dates.tz_localize(None)
+        
+        expected_dates = expected_index.normalize()
+        if expected_dates.tz is not None:
+            expected_dates = expected_dates.tz_localize(None)
+        
         # Find missing dates
-        missing = expected_index.difference(df.index)
+        missing = expected_dates.difference(df_dates)
         
         if len(missing) == 0:
             return pd.DataFrame(columns=["expected", "gap_size"])
@@ -166,6 +176,15 @@ class GapHandler:
         trading_days_only: bool,
     ) -> pd.DataFrame:
         """Add missing rows to DataFrame."""
+        # Normalize index to midnight (removes time component)
+        # This is needed because Pandera validation may add time offsets
+        df = df.copy()
+        original_name = df.index.name
+        df.index = df.index.normalize()
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        df.index.name = original_name
+        
         start = df.index.min()
         end = df.index.max()
         
@@ -173,6 +192,10 @@ class GapHandler:
             full_index = pd.bdate_range(start=start, end=end, freq="B")
         else:
             full_index = pd.date_range(start=start, end=end, freq=freq)
+        
+        # Ensure both are tz-naive for reindex
+        if full_index.tz is not None:
+            full_index = full_index.tz_localize(None)
         
         return df.reindex(full_index)
     

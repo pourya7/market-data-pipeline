@@ -90,9 +90,23 @@ src/market_data/
 ├── clients/        # Exchange clients (Yahoo, Polygon, Oanda)
 ├── cleaning/       # Data cleaning (validation, adjustments, gaps)
 ├── core/           # Rate limiting, retry, config
+├── dashboard/      # Streamlit Command Center
 ├── models/         # Pydantic OHLCV models
 └── storage/        # Parquet persistence
 ```
+
+## Dashboard
+
+Launch the interactive Command Center:
+
+```bash
+streamlit run src/market_data/dashboard/app.py
+```
+
+**Features:**
+- 🏥 **Health Dashboard** — Monitor all tickers with status indicators
+- 📈 **Interactive Charts** — Plotly candlestick & volume charts
+- ⬇️ **Download Trigger** — Fetch data with real-time logs
 
 ## Development
 
