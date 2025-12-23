@@ -182,3 +182,143 @@ class TestComputeAdjustmentFactors:
         
         assert isinstance(factors, pd.Series)
         assert len(factors) == len(sample_ohlcv_df)
+
+
+class TestEdgeCases:
+    """Edge case tests for corporate action adjustments."""
+    
+    def test_reverse_split(self, sample_ohlcv_df):
+        """Test reverse split (consolidation) e.g., 1:10."""
+        adjuster = CorporateActionAdjuster()
+        
+        # 1:10 reverse split - every 10 shares becomes 1
+        split_date = sample_ohlcv_df.index[5].date()
+        action = CorporateAction(AdjustmentType.SPLIT, split_date, 0.1)
+        
+        result = adjuster.apply(sample_ohlcv_df, [action])
+        
+        # Pre-split prices should be multiplied by 10 (factor = 10)
+        pre_split = result[result.index.date < split_date]
+        post_split = result[result.index.date >= split_date]
+        
+        assert np.allclose(pre_split["adj_factor"].values, 10.0)
+        assert np.allclose(post_split["adj_factor"].values, 1.0)
+    
+    def test_fractional_split(self, sample_ohlcv_df):
+        """Test 3:2 fractional split."""
+        adjuster = CorporateActionAdjuster()
+        
+        split_date = sample_ohlcv_df.index[5].date()
+        # 3:2 split means you get 1.5x shares, factor = 1/1.5 = 0.667
+        action = CorporateAction(AdjustmentType.SPLIT, split_date, 1.5)
+        
+        result = adjuster.apply(sample_ohlcv_df, [action])
+        
+        pre_split = result[result.index.date < split_date]
+        
+        expected_factor = 1 / 1.5
+        assert np.allclose(pre_split["adj_factor"].values, expected_factor)
+    
+    def test_special_dividend(self, sample_ohlcv_df):
+        """Test large special dividend adjustment."""
+        adjuster = CorporateActionAdjuster()
+        
+        ex_date = sample_ohlcv_df.index[5].date()
+        # Large special dividend
+        special_div = 10.0
+        action = CorporateAction(AdjustmentType.DIVIDEND, ex_date, special_div)
+        
+        result = adjuster.apply(sample_ohlcv_df, [action])
+        
+        pre_ex = result[result.index.date < ex_date]
+        
+        # Large dividend should result in smaller factor
+        assert all(pre_ex["adj_factor"] < 1.0)
+        # Factor = (close - div) / close
+        expected_factor = (104.0 - special_div) / 104.0  # close on day before ex-date
+        assert np.allclose(pre_ex["adj_factor"].iloc[0], expected_factor, rtol=0.1)
+    
+    def test_future_dated_action(self, sample_ohlcv_df):
+        """Test that future-dated actions result in pre-split adjustment."""
+        adjuster = CorporateActionAdjuster()
+        
+        # Action dated after all data - all data is "pre-split"
+        future_date = date(2025, 1, 15)
+        action = CorporateAction(AdjustmentType.SPLIT, future_date, 2.0)
+        
+        result = adjuster.apply(sample_ohlcv_df, [action])
+        
+        # All data is before the split, so all factors should be 0.5 (1/2)
+        assert np.allclose(result["adj_factor"].values, 0.5)
+    
+    def test_action_before_data(self, sample_ohlcv_df):
+        """Test action dated before all data."""
+        adjuster = CorporateActionAdjuster()
+        
+        # Action dated before all data
+        past_date = date(2023, 1, 1)
+        action = CorporateAction(AdjustmentType.SPLIT, past_date, 2.0)
+        
+        result = adjuster.apply(sample_ohlcv_df, [action])
+        
+        # All adjustment factors should be 0.5 (data is all post-split)
+        assert np.allclose(result["adj_factor"].values, 1.0)
+    
+    def test_empty_dataframe(self):
+        """Test with empty DataFrame."""
+        adjuster = CorporateActionAdjuster()
+        
+        df = pd.DataFrame(
+            columns=["open", "high", "low", "close", "volume"],
+            index=pd.DatetimeIndex([]),
+        )
+        
+        result = adjuster.apply(df, [])
+        
+        assert result.empty
+        assert "adj_close" in result.columns
+    
+    def test_single_row(self):
+        """Test with single row DataFrame."""
+        adjuster = CorporateActionAdjuster()
+        
+        df = pd.DataFrame({
+            "open": [100.0],
+            "high": [105.0],
+            "low": [95.0],
+            "close": [102.0],
+            "volume": [1000000.0],
+        }, index=pd.DatetimeIndex(["2024-01-15"]))
+        
+        action = CorporateAction(AdjustmentType.SPLIT, date(2024, 1, 10), 2.0)
+        result = adjuster.apply(df, [action])
+        
+        assert len(result) == 1
+        assert "adj_close" in result.columns
+    
+    def test_multiple_actions_same_day(self):
+        """Test multiple actions on the same day."""
+        adjuster = CorporateActionAdjuster()
+        
+        dates = pd.bdate_range("2024-01-01", periods=5)
+        df = pd.DataFrame({
+            "open": [100.0] * 5,
+            "high": [105.0] * 5,
+            "low": [95.0] * 5,
+            "close": [100.0, 101.0, 102.0, 103.0, 104.0],
+            "volume": [1000000.0] * 5,
+        }, index=dates)
+        
+        # Split and dividend on same day
+        same_date = df.index[3].date()
+        actions = [
+            CorporateAction(AdjustmentType.SPLIT, same_date, 2.0),
+            CorporateAction(AdjustmentType.DIVIDEND, same_date, 0.5),
+        ]
+        
+        result = adjuster.apply(df, actions)
+        
+        # Both adjustments should be applied
+        pre_action = result[result.index.date < same_date]
+        assert all(pre_action["adj_factor"] < 1.0)
+
