@@ -1,16 +1,33 @@
-"""Interactive Charts page with technical indicators."""
+"""Interactive Charts page with technical indicators and timeframe resampling."""
 
 import streamlit as st
 from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 from market_data.storage import StorageManager, StorageConfig
 from market_data.features import TechnicalAnalyzer
+from market_data.resampling import TimeResampler
 from market_data.dashboard.components.charts import (
     create_candlestick_chart,
     create_line_chart,
     create_indicator_chart,
 )
+
+
+# Timeframe options
+TIMEFRAME_OPTIONS = {
+    "Raw (as stored)": None,
+    "1 Minute": "1min",
+    "5 Minutes": "5min",
+    "15 Minutes": "15min",
+    "30 Minutes": "30min",
+    "1 Hour": "1h",
+    "4 Hours": "4h",
+    "Daily": "1D",
+    "Weekly": "1W",
+}
 
 
 def render_charts():
@@ -73,6 +90,16 @@ def render_charts():
             value=default_end,
         )
     
+    # Timeframe selection
+    st.sidebar.markdown("### ⏱️ Timeframe")
+    
+    selected_timeframe = st.sidebar.selectbox(
+        "Resample To",
+        options=list(TIMEFRAME_OPTIONS.keys()),
+        index=0,
+        help="Resample data to a different timeframe",
+    )
+    
     # Chart options
     st.sidebar.markdown("### ⚙️ Chart Options")
     
@@ -112,7 +139,19 @@ def render_charts():
         st.warning(f"No data found for {selected_symbol} in the selected date range.")
         return
     
-    # Calculate indicators if needed
+    # Resample if needed
+    timeframe = TIMEFRAME_OPTIONS[selected_timeframe]
+    original_count = len(df)
+    
+    if timeframe is not None:
+        resampler = TimeResampler()
+        try:
+            df = resampler.resample(df, timeframe)
+        except Exception as e:
+            st.error(f"Failed to resample data: {e}")
+            return
+    
+    # Calculate indicators if needed (after resampling)
     analyzer = TechnicalAnalyzer()
     
     if show_sma:
@@ -137,7 +176,12 @@ def render_charts():
     
     # Display chart
     st.markdown(f"### {selected_symbol}")
-    st.caption(f"{len(df):,} data points • {start_date} to {end_date}")
+    
+    # Show timeframe info
+    if timeframe is not None:
+        st.caption(f"{len(df):,} bars ({selected_timeframe}) • Resampled from {original_count:,} rows • {start_date} to {end_date}")
+    else:
+        st.caption(f"{len(df):,} data points • {start_date} to {end_date}")
     
     # Build overlay indicators list
     overlays = []
@@ -234,7 +278,3 @@ def render_charts():
             rsi_val = df["rsi_14"].iloc[-1]
             if not pd.isna(rsi_val):
                 st.metric("RSI (14)", f"{rsi_val:.1f}")
-
-
-# Need to import pandas for NaN check
-import pandas as pd
