@@ -90,9 +90,43 @@ src/market_data/
 ├── clients/        # Exchange clients (Yahoo, Polygon, Oanda)
 ├── cleaning/       # Data cleaning (validation, adjustments, gaps)
 ├── core/           # Rate limiting, retry, config
+├── dashboard/      # Streamlit Command Center
+├── features/       # Technical analysis & feature engineering
 ├── models/         # Pydantic OHLCV models
+├── resampling/     # Time/volume/tick bar generation
 └── storage/        # Parquet persistence
 ```
+
+## Feature Engineering
+
+Add technical indicators to your OHLCV data:
+
+```python
+from market_data.features import TechnicalAnalyzer, FeaturePipeline
+
+# Quick: Add default indicators
+analyzer = TechnicalAnalyzer()
+df = analyzer.add_defaults(df)  # RSI, MACD, BBands, SMA, EMA, ATR
+
+# Or use the pipeline with YAML config
+pipeline = FeaturePipeline()
+df = pipeline.calculate_features(df, asset_class="crypto")
+```
+
+**Available Indicators:** RSI, MACD, Bollinger Bands, SMA, EMA, ATR, Stochastic, Volume SMA
+
+## Dashboard
+
+Launch the interactive Command Center:
+
+```bash
+streamlit run src/market_data/dashboard/app.py
+```
+
+**Features:**
+- 🏥 **Health Dashboard** — Monitor all tickers with status indicators
+- 📈 **Interactive Charts** — Plotly candlestick & volume charts
+- ⬇️ **Download Trigger** — Fetch data with real-time logs
 
 ## Development
 

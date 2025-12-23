@@ -1,0 +1,85 @@
+# Feature Configuration
+# Defines which technical indicators to calculate for different asset classes
+
+version: "1.0"
+
+# Default indicators applied to all assets
+default:
+  - name: rsi
+    params:
+      length: 14
+  - name: macd
+    params:
+      fast: 12
+      slow: 26
+      signal: 9
+  - name: bbands
+    params:
+      length: 20
+      std: 2.0
+  - name: sma
+    params:
+      length: 20
+  - name: sma
+    params:
+      length: 50
+  - name: ema
+    params:
+      length: 12
+  - name: ema
+    params:
+      length: 26
+  - name: atr
+    params:
+      length: 14
+  - name: volume_sma
+    params:
+      length: 20
+
+# Asset-class specific overrides
+asset_classes:
+  - asset_class: crypto
+    indicators:
+      - name: rsi
+        params:
+          length: 7
+      - name: macd
+        params:
+          fast: 8
+          slow: 21
+          signal: 5
+      - name: bbands
+        params:
+          length: 14
+          std: 2.5
+      - name: ema
+        params:
+          length: 9
+      - name: ema
+        params:
+          length: 21
+      - name: atr
+        params:
+          length: 10
+
+  - asset_class: forex
+    indicators:
+      - name: rsi
+        params:
+          length: 14
+      - name: macd
+        params:
+          fast: 12
+          slow: 26
+          signal: 9
+      - name: bbands
+        params:
+          length: 20
+          std: 2.0
+      - name: atr
+        params:
+          length: 14
+      - name: stochastic
+        params:
+          k_length: 14
+          d_length: 3

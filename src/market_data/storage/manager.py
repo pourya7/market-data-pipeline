@@ -69,10 +69,19 @@ class StorageManager:
     
     @property
     def manifest(self) -> Manifest:
-        """Get cached manifest, loading from disk if needed."""
+        """Get manifest, loading from disk if not cached."""
         if self._manifest is None:
             self._manifest = self.manifest_manager.load()
         return self._manifest
+    
+    def reload_manifest(self) -> Manifest:
+        """Force reload manifest from disk and update cache."""
+        self._manifest = self.manifest_manager.load()
+        return self._manifest
+    
+    def clear_manifest_cache(self) -> None:
+        """Clear the manifest cache to force reload on next access."""
+        self._manifest = None
     
     def save(
         self,
@@ -99,6 +108,11 @@ class StorageManager:
         if not isinstance(df.index, pd.DatetimeIndex):
             raise ValueError("DataFrame must have DatetimeIndex")
         
+        # Normalize timezone: convert to UTC then make tz-naive for consistent storage
+        df = df.copy()
+        if df.index.tz is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
+        
         # Group by year
         df = df.sort_index()
         df["_year"] = df.index.year
@@ -110,6 +124,9 @@ class StorageManager:
             if mode == "append" and partition_path.exists():
                 # Merge with existing data
                 existing = self.reader.read(partition_path)
+                # Ensure existing is also tz-naive
+                if existing.index.tz is not None:
+                    existing.index = existing.index.tz_convert("UTC").tz_localize(None)
                 combined = pd.concat([existing, year_df])
                 combined = combined[~combined.index.duplicated(keep="last")]
                 combined = combined.sort_index()
@@ -141,6 +158,7 @@ class StorageManager:
         start_date: Optional[date | str] = None,
         end_date: Optional[date | str] = None,
         columns: Optional[list[str]] = None,
+        interval: Optional[str] = None,
     ) -> pd.DataFrame:
         """Load OHLCV data from storage.
         
@@ -149,6 +167,7 @@ class StorageManager:
             start_date: Filter data from this date.
             end_date: Filter data until this date.
             columns: Columns to load (None = all).
+            interval: Filter by bar interval (e.g., "1m", "1d"). None = all.
             
         Returns:
             DataFrame with requested data.
@@ -191,7 +210,34 @@ class StorageManager:
         if end_date:
             result = result[result.index.date <= end_date]
         
+        # Apply interval filter
+        if interval is not None and "interval" in result.columns:
+            result = result[result["interval"] == interval]
+        
         return result
+    
+    def get_available_intervals(self, symbol: str) -> list[str]:
+        """Get available intervals for a symbol.
+        
+        Args:
+            symbol: Ticker symbol.
+            
+        Returns:
+            List of available intervals (e.g., ["1m", "1d"]).
+        """
+        symbol = symbol.upper()
+        partitions = self.partitions.get_partitions_for_symbol(symbol)
+        
+        if not partitions:
+            return []
+        
+        intervals = set()
+        for partition in partitions:
+            df = self.reader.read(partition.path, columns=["interval"])
+            if "interval" in df.columns:
+                intervals.update(df["interval"].dropna().unique())
+        
+        return sorted(list(intervals))
     
     def needs_update(
         self,
