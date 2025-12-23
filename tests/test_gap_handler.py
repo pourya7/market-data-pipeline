@@ -179,3 +179,120 @@ class TestGapStatistics:
         assert stats["total_gaps"] > 0
         assert stats["max_gap_size"] > 0
         assert "gap_dates" in stats
+
+
+class TestEdgeCases:
+    """Edge case tests for gap handling."""
+    
+    def test_empty_dataframe(self):
+        """Test with empty DataFrame."""
+        handler = GapHandler()
+        
+        df = pd.DataFrame(
+            columns=["open", "high", "low", "close", "volume"],
+            index=pd.DatetimeIndex([]),
+        )
+        
+        gaps = handler.detect_gaps(df)
+        assert len(gaps) == 0
+    
+    def test_single_row(self):
+        """Test with single row DataFrame."""
+        handler = GapHandler()
+        
+        df = pd.DataFrame({
+            "close": [100.0],
+        }, index=pd.DatetimeIndex(["2024-01-15"]))
+        
+        gaps = handler.detect_gaps(df)
+        assert len(gaps) == 0
+    
+    def test_weekend_not_counted_as_gap(self):
+        """Test that weekends are not counted as gaps when using business days."""
+        handler = GapHandler()
+        
+        # Friday to Monday (no weekend gap expected)
+        dates = pd.to_datetime(["2024-01-05", "2024-01-08"])  # Friday & Monday
+        df = pd.DataFrame({
+            "close": [100.0, 101.0],
+        }, index=dates)
+        
+        gaps = handler.detect_gaps(df, freq="B", trading_days_only=True)
+        
+        # No gaps expected - this is a normal weekend
+        assert len(gaps) == 0
+    
+    def test_holiday_gap_detected(self):
+        """Test that missing trading days (holidays) are detected."""
+        handler = GapHandler()
+        
+        # Monday to Wednesday (missing Tuesday)
+        dates = pd.to_datetime(["2024-01-08", "2024-01-10"])  # Mon & Wed
+        df = pd.DataFrame({
+            "close": [100.0, 102.0],
+        }, index=dates)
+        
+        gaps = handler.detect_gaps(df, freq="B")
+        
+        # Should detect Tuesday as missing
+        assert len(gaps) > 0
+    
+    def test_all_nan_input(self):
+        """Test handling of all-NaN column."""
+        handler = GapHandler(strategy=GapStrategy.FORWARD_FILL)
+        
+        dates = pd.bdate_range("2024-01-02", periods=5)
+        df = pd.DataFrame({
+            "close": [np.nan] * 5,
+        }, index=dates)
+        
+        result = handler.fill_gaps(df)
+        
+        # Should still be NaN since no data to forward fill
+        assert result["close"].isna().all()
+    
+    def test_consecutive_weekends(self):
+        """Test data spanning multiple weeks."""
+        handler = GapHandler()
+        
+        # Two Fridays (skip weekend in between)
+        dates = pd.to_datetime(["2024-01-05", "2024-01-12"])  # Two Fridays
+        df = pd.DataFrame({
+            "close": [100.0, 105.0],
+        }, index=dates)
+        
+        gaps = handler.detect_gaps(df, freq="B")
+        
+        # Should detect Mon-Thu as missing (4 business days)
+        assert gaps["gap_size"].sum() == 4
+    
+    def test_very_large_gap(self):
+        """Test handling of very large gaps (months)."""
+        handler = GapHandler(strategy=GapStrategy.FORWARD_FILL, max_gap_size=5)
+        
+        dates = pd.to_datetime(["2024-01-02", "2024-03-01"])
+        df = pd.DataFrame({
+            "close": [100.0, 150.0],
+        }, index=dates)
+        
+        result = handler.fill_gaps(df, freq="B")
+        
+        # Should have NaN in the middle due to max_gap_size limit
+        assert result["close"].isna().any()
+    
+    def test_duplicate_timestamps(self):
+        """Test handling of duplicate timestamps."""
+        handler = GapHandler()
+        
+        dates = pd.to_datetime([
+            "2024-01-02", "2024-01-02",  # Duplicate
+            "2024-01-03", "2024-01-04",
+        ])
+        df = pd.DataFrame({
+            "close": [100.0, 100.5, 101.0, 102.0],
+        }, index=dates)
+        
+        # Should not crash
+        gaps = handler.detect_gaps(df, freq="B")
+        assert isinstance(gaps, pd.DataFrame)
+
