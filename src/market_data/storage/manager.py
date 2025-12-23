@@ -108,6 +108,11 @@ class StorageManager:
         if not isinstance(df.index, pd.DatetimeIndex):
             raise ValueError("DataFrame must have DatetimeIndex")
         
+        # Normalize timezone: convert to UTC then make tz-naive for consistent storage
+        df = df.copy()
+        if df.index.tz is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
+        
         # Group by year
         df = df.sort_index()
         df["_year"] = df.index.year
@@ -119,6 +124,9 @@ class StorageManager:
             if mode == "append" and partition_path.exists():
                 # Merge with existing data
                 existing = self.reader.read(partition_path)
+                # Ensure existing is also tz-naive
+                if existing.index.tz is not None:
+                    existing.index = existing.index.tz_convert("UTC").tz_localize(None)
                 combined = pd.concat([existing, year_df])
                 combined = combined[~combined.index.duplicated(keep="last")]
                 combined = combined.sort_index()
