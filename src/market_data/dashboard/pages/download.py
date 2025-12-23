@@ -1,4 +1,4 @@
-"""Download Trigger page."""
+"""Download Trigger page with interval selection."""
 
 import streamlit as st
 import asyncio
@@ -11,6 +11,18 @@ from market_data.clients.yahoo import YahooFinanceClient
 from market_data.cleaning.pipeline import DataCleaner
 from market_data.storage import StorageManager, StorageConfig
 from market_data.models import OHLCVDataset
+
+
+# Interval options with descriptions and date restrictions
+INTERVAL_OPTIONS = {
+    "1m (1 Minute)": {"interval": "1m", "max_days": 7, "description": "Last 7 days only"},
+    "5m (5 Minutes)": {"interval": "5m", "max_days": 60, "description": "Last 60 days only"},
+    "15m (15 Minutes)": {"interval": "15m", "max_days": 60, "description": "Last 60 days only"},
+    "30m (30 Minutes)": {"interval": "30m", "max_days": 60, "description": "Last 60 days only"},
+    "1h (1 Hour)": {"interval": "1h", "max_days": 730, "description": "Last 2 years"},
+    "1d (Daily)": {"interval": "1d", "max_days": None, "description": "No limit"},
+    "1wk (Weekly)": {"interval": "1wk", "max_days": None, "description": "No limit"},
+}
 
 
 def render_download():
@@ -35,23 +47,62 @@ def render_download():
             value="./data",
         )
     
-    # Date range - defaults to current month
+    # Interval selection
+    st.markdown("### ⏱️ Interval")
+    
+    selected_interval_label = st.selectbox(
+        "Data Interval",
+        options=list(INTERVAL_OPTIONS.keys()),
+        index=5,  # Default to Daily
+        help="Select the bar interval. Intraday data has date range restrictions.",
+    )
+    
+    interval_info = INTERVAL_OPTIONS[selected_interval_label]
+    interval = interval_info["interval"]
+    max_days = interval_info["max_days"]
+    
+    # Show restriction warning for intraday
+    if max_days is not None:
+        st.info(f"⚠️ **{selected_interval_label}**: Yahoo Finance limits this to the last **{max_days} days** of data.")
+    
+    # Date range - defaults based on interval
     today = date.today()
-    month_start = today.replace(day=1)
+    
+    if max_days is not None:
+        # For intraday, default to max allowed range
+        default_start = today - timedelta(days=min(max_days - 1, 7))
+        min_allowed_date = today - timedelta(days=max_days)
+    else:
+        # For daily+, default to current month
+        default_start = today.replace(day=1)
+        min_allowed_date = date(2000, 1, 1)
+    
+    st.markdown("### 📅 Date Range")
     
     col1, col2 = st.columns(2)
     
     with col1:
         start_date = st.date_input(
             "Start Date",
-            value=month_start,
+            value=default_start,
+            min_value=min_allowed_date,
+            max_value=today,
         )
     
     with col2:
         end_date = st.date_input(
             "End Date",
             value=today,
+            min_value=min_allowed_date,
+            max_value=today,
         )
+    
+    # Validate date range for intraday
+    if max_days is not None:
+        days_requested = (end_date - start_date).days + 1
+        if days_requested > max_days:
+            st.error(f"❌ Date range exceeds {max_days} days limit for {interval} interval. Please reduce the range.")
+            return
     
     # Options
     with st.expander("⚙️ Options"):
@@ -92,7 +143,7 @@ def render_download():
             status_text.text(f"Processing {symbol}... ({i + 1}/{total})")
             
             try:
-                log(f"[{symbol}] Starting download...")
+                log(f"[{symbol}] Starting download ({interval})...")
                 
                 # Fetch data
                 client = YahooFinanceClient()
@@ -103,6 +154,7 @@ def render_download():
                         symbol=symbol,
                         start_date=start_date,
                         end_date=end_date,
+                        interval=interval,
                     )
                 )
                 
@@ -121,12 +173,14 @@ def render_download():
                 )
                 df = dataset.to_pandas()
                 
-                # Clean if requested
-                if clean_data:
+                # Clean if requested (only for daily data)
+                if clean_data and interval == "1d":
                     log(f"[{symbol}] Cleaning data...")
                     cleaner = DataCleaner()
                     df = cleaner.clean(df)
                     log(f"[{symbol}] Cleaned: {len(df)} rows")
+                elif clean_data and interval != "1d":
+                    log(f"[{symbol}] ℹ️ Skipping cleaning (intraday data)")
                 
                 # Store
                 log(f"[{symbol}] Saving to storage...")
@@ -138,32 +192,30 @@ def render_download():
                 success_count += 1
                 
             except Exception as e:
-                log(f"[{symbol}] ❌ Error: {str(e)}")
+                log(f"[{symbol}] ❌ Error: {e}")
                 error_count += 1
         
-        # Final status
+        # Completion
         progress_bar.progress(1.0)
         status_text.empty()
         
-        if error_count == 0:
-            st.success(f"✅ Successfully downloaded {success_count} symbol(s)!")
-        elif success_count > 0:
-            st.warning(f"⚠️ Completed: {success_count} success, {error_count} failed")
-        else:
-            st.error(f"❌ All {error_count} downloads failed")
-        
-        # Clear any cached data
+        # Clear cache so dashboard can see new data
         st.cache_data.clear()
         
-        # Offer to navigate to other pages
-        st.info("💡 Data saved! Navigate to Health Dashboard or Charts to view.")
+        # Summary
+        st.markdown("---")
+        if error_count == 0:
+            st.success(f"✅ Downloaded {success_count} symbol(s) successfully!")
+        else:
+            st.warning(f"Completed with {success_count} success, {error_count} errors")
         
+        # Navigation buttons
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🏥 Go to Health Dashboard", use_container_width=True):
-                st.session_state["nav"] = "health"
+            if st.button("📊 View Health Dashboard"):
+                st.session_state["nav"] = "Health Dashboard"
                 st.rerun()
         with col2:
-            if st.button("📈 Go to Charts", use_container_width=True):
-                st.session_state["nav"] = "charts"
+            if st.button("📈 View Charts"):
+                st.session_state["nav"] = "Charts"
                 st.rerun()
